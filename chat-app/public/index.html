@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Chat App with Rooms</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        #messages {
+            list-style-type: none;
+            padding: 0;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        #messages li {
+            padding: 8px;
+            margin-bottom: 8px;
+            background-color: #f4f4f4;
+            border-radius: 5px;
+            width: fit-content;
+        }
+
+        #messages li.right {
+            text-align: right;
+            background-color: #d1f7d1;
+            /* Light green for own messages */
+            margin-left: auto;
+        }
+
+        #messages li.left {
+            text-align: left;
+            background-color: #e1e1e1;
+            /* Light gray for others' messages */
+        }
+
+        #form {
+            display: flex;
+        }
+
+        #input {
+            flex: 1;
+            padding: 10px;
+        }
+
+        #send {
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Chat App</h2>
+    <div id="auth">
+        <h3>Login</h3>
+        <input type="text" id="loginUsername" placeholder="Enter username">
+        <input type="password" id="loginPassword" placeholder="Enter password">
+        <button id="loginButton">Login</button>
+
+        <h3>Register</h3>
+        <input type="text" id="registerUsername" placeholder="Enter username">
+        <input type="password" id="registerPassword" placeholder="Enter password">
+        <button id="registerButton">Register</button>
+    </div>
+
+    <div id="chat" style="display: none;">
+        <div>
+            <label for="room">Room:</label>
+            <input type="text" id="room" placeholder="Enter room name">
+            <button id="joinButton">Join Room</button>
+        </div>
+        <ul id="messages"></ul>
+        <form id="form">
+            <input id="input" autocomplete="off" placeholder="Type a message..." />
+            <button id="send">Send</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const authDiv = document.getElementById('auth');
+        const chatDiv = document.getElementById('chat');
+        const loginUsername = document.getElementById('loginUsername');
+        const loginPassword = document.getElementById('loginPassword');
+        const loginButton = document.getElementById('loginButton');
+        const registerUsername = document.getElementById('registerUsername');
+        const registerPassword = document.getElementById('registerPassword');
+        const registerButton = document.getElementById('registerButton');
+        const roomInput = document.getElementById('room');
+        const joinButton = document.getElementById('joinButton');
+        const input = document.getElementById('input');
+        const messages = document.getElementById('messages');
+        const sendButton = document.getElementById('send');
+        let token = null;
+        let currentRoom = null;
+
+        // Register new user
+        registerButton.addEventListener('click', async () => {
+            const username = registerUsername.value.trim();
+            const password = registerPassword.value.trim();
+            if (username && password) {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (response.ok) {
+                    alert('User registered');
+                }
+            }
+        });
+
+        // Login existing user
+        loginButton.addEventListener('click', async () => {
+            const username = loginUsername.value.trim();
+            const password = loginPassword.value.trim();
+            if (username && password) {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (data.token) {
+                    token = data.token;
+                    socket.username = username;  // Set the username for the socket connection
+                    authDiv.style.display = 'none';
+                    chatDiv.style.display = 'block';
+                }
+            }
+        });
+
+        // Join room
+        joinButton.addEventListener('click', () => {
+            const room = roomInput.value.trim();
+            if (room && token) {
+                socket.emit('join room', room, token);
+                currentRoom = room;
+            }
+        });
+
+        // Send message
+        sendButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (input.value && currentRoom) {
+                const message = input.value;
+                socket.emit('chat message', { room: currentRoom, message });
+                input.value = '';
+            }
+        });
+
+        // Listen for chat messages
+        socket.on('chat message', (data) => {
+            const { user, message } = data;
+            const item = document.createElement('li');
+            item.classList.add(user === socket.username ? 'right' : 'left');
+            item.textContent = `${user}: ${message}`;
+            messages.appendChild(item);
+            window.scrollTo(0, document.body.scrollHeight);
+        });
+
+        // Listen for chat history when joining a room
+        socket.on('chat history', (history) => {
+            history.forEach(data => {
+                const { user, message } = data;
+                const item = document.createElement('li');
+                item.classList.add(user === socket.username ? 'right' : 'left');
+                item.textContent = `${user}: ${message}`;
+                messages.appendChild(item);
+            });
+        });
+    </script>
+</body>
+
+</html>
